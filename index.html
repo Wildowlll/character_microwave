@@ -283,7 +283,7 @@
 </div>
 
 <script type="module">
-import { GIFEncoder, quantize, applyPalette } from "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js";
+import { GIFEncoder, quantize } from "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js";
 
 const BW = 480, BH = 340; // 설계 좌표계
 const $ = (id) => document.getElementById(id);
@@ -464,6 +464,7 @@ function buildKeyring() {
   const art = document.createElement("canvas"); art.width = W; art.height = H;
   const ag = art.getContext("2d", { willReadFrequently: true });
   ag.filter = "saturate(1.25) contrast(1.05)";
+  ag.imageSmoothingQuality = "high";
   let x = O + 2;
   list.forEach((c, i) => {
     const [w, h] = sizes[i];
@@ -805,6 +806,7 @@ function sizePreview() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   preview.width = BW * dpr; preview.height = BH * dpr;
   pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  pctx.imageSmoothingQuality = "high";
 }
 sizePreview();
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -897,33 +899,62 @@ $("make").addEventListener("click", async () => {
     const outW = state.size, outH = Math.round(outW * BH / BW);
     const c = document.createElement("canvas"); c.width = outW; c.height = outH;
     const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingQuality = "high";   // 캐릭터 축소할 때 선이 계단지지 않게
     const F = state.frames;
     const dt = state.sec / F;                          // 프레임 간격(초)
     const delay = Math.max(20, Math.round(dt * 1000 / 10) * 10);
     const { S, total } = timeline();
     const spinFrames = Math.round(S / dt);
     const N = state.ending ? spinFrames + Math.round((total - S) / dt) : spinFrames;
+    const P = outW * outH;
     const render = (i) => {
       ctx.setTransform(outW / BW, 0, 0, outH / BH, 0, 0);
       drawFrame(ctx, i < spinFrames ? i * dt : S + (i - spinFrames) * dt);
       return ctx.getImageData(0, 0, outW, outH).data;
     };
 
-    // 타임라인 여기저기서 뽑은 공용 팔레트 (프레임마다 색이 튀지 않게, 키링 색 포함)
-    status.textContent = "색 고르는 중…";
-    await tick();
-    const picks = [];
-    for (let j = 0; j < 12; j++) picks.push(render(Math.min(N - 1, Math.floor(j / 11 * (N - 1)))));
-    const sample = new Uint8ClampedArray(picks.length * picks[0].length);
-    picks.forEach((d, i) => sample.set(d, i * d.length));
-    const palette = quantize(sample, 256, { format: "rgb565" });
-
+    // 화질 전략
+    // 1) 이전 프레임과 똑같은 픽셀은 투명(=이전 그대로 유지) → 배경이 깜빡이지 않고 용량도 줄어듦
+    // 2) 바뀐 픽셀만 모아서 그 프레임 전용 255색 팔레트를 만듦 (256번째는 투명용)
+    // 3) 색 매핑은 줄인 비트(rgb565)가 아니라 원래 24비트 색으로 가장 가까운 색을 찾음
     status.textContent = "굽는 중…";
     const gif = GIFEncoder();
+    let prev = null, lastPal = null;
     for (let i = 0; i < N; i++) {
-      const index = applyPalette(render(i), palette, "rgb565");
-      gif.writeFrame(index, outW, outH, i === 0 ? { palette, delay, repeat: 0 } : { delay });
-      if (i % 4 === 0) { bar.style.width = (8 + i / N * 92) + "%"; await tick(); }
+      const f = render(i);
+      const changed = new Uint8Array(P); let nc = 0;
+      for (let q = 0, o = 0; q < P; q++, o += 4) {
+        if (!prev || f[o] !== prev[o] || f[o + 1] !== prev[o + 1] || f[o + 2] !== prev[o + 2]) { changed[q] = 1; nc++; }
+      }
+      let pal = lastPal;
+      if (nc || !pal) {
+        const buf = new Uint8ClampedArray(Math.max(1, nc) * 4);
+        for (let q = 0, k = 0; q < P; q++) if (changed[q]) { buf.set(f.subarray(q * 4, q * 4 + 4), k); k += 4; }
+        pal = quantize(buf, 255);
+        while (pal.length < 256) pal.push([0, 0, 0]);   // 255번 = 투명
+      }
+      const index = new Uint8Array(P);
+      const cache = new Map();
+      for (let q = 0, o = 0; q < P; q++, o += 4) {
+        if (!changed[q]) { index[q] = 255; continue; }
+        const key = (f[o] << 16) | (f[o + 1] << 8) | f[o + 2];
+        let best = cache.get(key);
+        if (best === undefined) {
+          let bd = Infinity;
+          for (let j = 0; j < 255; j++) {
+            const c = pal[j], dr = f[o] - c[0], dg = f[o + 1] - c[1], db = f[o + 2] - c[2];
+            const d = 2 * dr * dr + 4 * dg * dg + 3 * db * db;   // 눈이 민감한 초록에 가중치
+            if (d < bd) { bd = d; best = j; }
+          }
+          cache.set(key, best);
+        }
+        index[q] = best;
+      }
+      gif.writeFrame(index, outW, outH, i === 0
+        ? { palette: pal, delay, repeat: 0 }
+        : { palette: pal, delay, transparent: true, transparentIndex: 255, dispose: 1 });
+      prev = f; lastPal = pal;
+      if (i % 3 === 0) { bar.style.width = (i / N * 100) + "%"; await tick(); }
     }
     gif.finish();
     bar.style.width = "100%";
