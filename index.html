@@ -259,11 +259,6 @@
 
       <div class="group">
         <h2>OUTPUT</h2>
-        <div class="seg" role="radiogroup" aria-label="GIF 크기">
-          <input type="radio" name="size" id="s-240" value="240"><label for="s-240">240px<br><small>이모지용</small></label>
-          <input type="radio" name="size" id="s-360" value="360" checked><label for="s-360">360px<br><small>기본</small></label>
-          <input type="radio" name="size" id="s-480" value="480"><label for="s-480">480px<br><small>선명하게</small></label>
-        </div>
         <button type="button" class="start" id="make">START · GIF 굽기</button>
         <div class="progress" aria-hidden="true"><i id="bar"></i></div>
         <p class="status" id="status" role="status"></p>
@@ -294,7 +289,7 @@ const state = {
   scale: 1, lift: 0, gap: 110, backDark: true,
   sec: 2, frames: 36, led: "0:30", flicker: true,
   ending: true, spins: 2, caption: "키링 완성!",
-  body: "#BFD9CF", size: 360,
+  body: "#BFD9CF", size: 480,
 };
 let chars = [null, null]; // { front, frontDark, frontUrl, frontName, back, backDark, backUrl, backName }
 
@@ -835,7 +830,6 @@ bindRange("spins", "spinsOut", v => state.spins = v, v => v + "바퀴");
 $("caption").addEventListener("input", e => state.caption = e.target.value);
 $("ledText").addEventListener("input", e => state.led = e.target.value);
 document.querySelectorAll('input[name=body]').forEach(r => r.addEventListener("change", e => state.body = e.target.value));
-document.querySelectorAll('input[name=size]').forEach(r => r.addEventListener("change", e => state.size = +e.target.value));
 
 function loadImage(file, onReady) {
   if (!file || !file.type.startsWith("image/")) { $("status").textContent = "이미지 파일(PNG·JPG·WEBP 등)만 넣을 수 있어요."; return; }
