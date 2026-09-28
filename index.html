@@ -1,0 +1,750 @@
+<title>빙글빙글 전자레인지</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=DotGothic16&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #E4ECE8;
+    --surface: #F6F9F7;
+    --surface-2: #EDF3F0;
+    --line: #C9D6D0;
+    --text: #1B2320;
+    --muted: #5B6B64;
+    --panel: #1F2427;
+    --panel-2: #2C3236;
+    --panel-text: #D9E2DE;
+    --led: #FFB23E;
+    --led-bg: #121517;
+    --accent: #D9483A;
+    --accent-text: #FFFFFF;
+    --focus: #2F7D68;
+    --shadow: 0 1px 0 rgba(20,40,32,.06), 0 8px 24px -12px rgba(20,40,32,.25);
+    --display: "Do Hyeon", "IBM Plex Sans KR", system-ui, sans-serif;
+    --body: "IBM Plex Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --dot: "DotGothic16", ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #111614; --surface: #1A211E; --surface-2: #202825; --line: #2F3A35;
+      --text: #E3ECE7; --muted: #92A39B; --panel: #0D1012; --panel-2: #1D2226;
+      --accent: #EE5C4B; --focus: #6FC7AC;
+      --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #111614; --surface: #1A211E; --surface-2: #202825; --line: #2F3A35;
+    --text: #E3ECE7; --muted: #92A39B; --panel: #0D1012; --panel-2: #1D2226;
+    --accent: #EE5C4B; --focus: #6FC7AC;
+    --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.55;
+    padding-inline: 16px;
+    padding-block: 24px 48px;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 20px; }
+  header { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; }
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 5vw, 44px); line-height: 1.05; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+  h1 .spin { display: inline-block; animation: spin 2.4s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .lede { margin: 6px 0 0; color: var(--muted); max-width: 52ch; }
+  .led-tag { font-family: var(--dot); color: var(--led); background: var(--led-bg); padding: 4px 10px; border-radius: 6px; font-size: 14px; letter-spacing: .08em; }
+
+  .main { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .main { grid-template-columns: 1fr; } }
+
+  .stage {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px; display: grid; gap: 12px; box-shadow: var(--shadow);
+  }
+  .canvas-box { position: relative; border-radius: 10px; overflow: hidden; line-height: 0; }
+  .canvas-box canvas { width: 100%; height: auto; display: block; }
+  .canvas-box.drag::after {
+    content: "여기에 놓으면 넣어드려요"; position: absolute; inset: 0; display: grid; place-items: center;
+    background: rgba(18,21,23,.72); color: var(--led); font-family: var(--dot); font-size: 20px; line-height: 1.4;
+  }
+  .stage-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .hint { color: var(--muted); font-size: 13px; margin: 0; }
+
+  .panel {
+    background: var(--panel); color: var(--panel-text); border-radius: 14px; padding: 18px;
+    display: grid; gap: 18px; box-shadow: var(--shadow);
+  }
+  .panel h2 { font-family: var(--dot); font-weight: 400; font-size: 13px; letter-spacing: .14em; color: var(--led); margin: 0 0 8px; }
+  .group { display: grid; gap: 10px; }
+  .field { display: grid; gap: 6px; }
+  .field-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
+  .field-top output { font-family: var(--dot); color: var(--led); font-variant-numeric: tabular-nums; }
+  label { font-size: 13px; }
+
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .seg.four { grid-template-columns: repeat(4, 1fr); }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label {
+    display: grid; place-items: center; text-align: center; min-height: 40px; padding: 6px 4px;
+    background: var(--panel-2); border-radius: 8px; cursor: pointer; font-size: 13px; line-height: 1.25;
+    border: 1px solid transparent; box-shadow: inset 0 -2px 0 rgba(0,0,0,.35);
+  }
+  .seg input:checked + label { border-color: var(--led); color: var(--led); box-shadow: inset 0 2px 0 rgba(0,0,0,.35); }
+  .seg input:focus-visible + label { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatches input { position: absolute; opacity: 0; pointer-events: none; }
+  .swatches label {
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer; border: 2px solid var(--panel-2);
+    box-shadow: 0 0 0 2px transparent; display: block;
+  }
+  .swatches input:checked + label { box-shadow: 0 0 0 2px var(--led); }
+  .swatches input:focus-visible + label { outline: 2px solid var(--focus); outline-offset: 3px; }
+
+  input[type=range] { width: 100%; accent-color: var(--led); }
+  input[type=text] {
+    font-family: var(--dot); font-size: 18px; letter-spacing: .1em; color: var(--led); background: var(--led-bg);
+    border: 1px solid #3a4146; border-radius: 8px; padding: 6px 10px; width: 100%;
+  }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .check input { accent-color: var(--led); width: 16px; height: 16px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  button, .file-btn {
+    font: inherit; font-weight: 600; border-radius: 10px; border: 0; cursor: pointer;
+    padding: 10px 16px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  button:focus-visible, .file-btn:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .file-btn { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+  .file-btn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .start {
+    background: var(--accent); color: var(--accent-text); font-family: var(--display); font-weight: 400;
+    font-size: 20px; width: 100%; min-height: 54px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25);
+  }
+  .start:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(0,0,0,.25); }
+  .start:disabled { opacity: .6; cursor: progress; }
+  .progress { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--led); transition: width .1s linear; }
+  .status { font-family: var(--dot); font-size: 13px; color: var(--led); min-height: 1.4em; margin: 0; }
+
+  .result {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+    display: grid; grid-template-columns: minmax(0, 320px) 1fr; gap: 16px; align-items: center; box-shadow: var(--shadow);
+  }
+  @media (max-width: 620px) { .result { grid-template-columns: 1fr; } }
+  .result img { border-radius: 8px; width: 100%; height: auto; display: block; background: var(--surface-2); }
+  .result h3 { font-family: var(--display); font-weight: 400; font-size: 24px; margin: 0; }
+  .result .meta { font-family: var(--dot); color: var(--muted); font-size: 13px; margin: 2px 0 10px; font-variant-numeric: tabular-nums; }
+  .result p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  .dl { background: var(--text); color: var(--bg); }
+
+  .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 460px) { .slots { grid-template-columns: 1fr; } }
+  .slot { display: flex; gap: 10px; align-items: center; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; min-width: 0; }
+  .thumb {
+    flex: none; width: 64px; height: 64px; border-radius: 8px; display: grid; place-items: center; overflow: hidden;
+    background: repeating-conic-gradient(var(--line) 0 25%, var(--surface) 0 50%) 0 0 / 12px 12px;
+  }
+  .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .thumb span { font-size: 11px; line-height: 1.3; color: var(--muted); text-align: center; background: var(--surface-2); padding: 2px 4px; border-radius: 4px; }
+  .slot-body { display: grid; gap: 4px; min-width: 0; }
+  .slot-body strong { font-size: 14px; }
+  .slot-body small { font-weight: 400; color: var(--muted); }
+  .slot-name { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .slot-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .small { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+  .stage-row .hint { flex: 1 1 260px; }
+
+  .cast { display: grid; gap: 12px; }
+  .cast-group { display: grid; gap: 6px; }
+  .cast-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .slot.over, .add-box.over { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus) inset; }
+  .add-box {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    border: 1.5px dashed var(--line); border-radius: 10px; padding: 10px 12px; color: var(--muted); font-size: 13px;
+  }
+
+  @media (prefers-reduced-motion: reduce) { h1 .spin { animation: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>빙글빙글 전자레인지 <span class="spin" aria-hidden="true">↻</span></h1>
+      <p class="lede">캐릭터 이미지를 넣으면 전자레인지 회전판 위에서 도는 GIF를 만들어요. 파일은 서버로 올라가지 않고 이 브라우저 안에서만 처리돼요.</p>
+    </div>
+    <span class="led-tag">HIGH · 700W</span>
+  </header>
+
+  <div class="main">
+    <section class="stage" aria-label="미리보기">
+      <div class="canvas-box" id="dropzone">
+        <canvas id="preview" width="480" height="340" aria-label="전자레인지 미리보기 애니메이션"></canvas>
+      </div>
+      <div class="cast" id="cast"></div>
+      <div class="stage-row">
+        <p class="hint">투명 PNG가 가장 잘 어울려요. 뒷모습이 없으면 앞모습을 좌우반전해서 180°마다 뒤집어요. 각 칸 위로 이미지를 끌어다 놓아도 돼요.</p>
+        <button type="button" class="ghost" id="reset">예시 캐릭터로</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="설정">
+      <div class="group">
+        <h2>CHARACTER</h2>
+        <div class="field">
+          <div class="field-top"><label for="scale">크기</label><output id="scaleOut">100%</output></div>
+          <input type="range" id="scale" min="40" max="140" value="100">
+        </div>
+        <div class="field">
+          <div class="field-top"><label for="lift">높이</label><output id="liftOut">0</output></div>
+          <input type="range" id="lift" min="-30" max="40" value="0">
+        </div>
+        <div class="field" id="gapField">
+          <div class="field-top"><label for="gap">둘 사이 간격</label><output id="gapOut">110</output></div>
+          <input type="range" id="gap" min="50" max="180" value="110">
+        </div>
+        <label class="check"><input type="checkbox" id="backDark" checked> 뒷모습은 살짝 어둡게</label>
+      </div>
+
+      <div class="group">
+        <h2>TIMER</h2>
+        <div class="two">
+          <div class="field">
+            <div class="field-top"><label for="sec">한 바퀴</label><output id="secOut">2.0초</output></div>
+            <input type="range" id="sec" min="6" max="60" value="20">
+          </div>
+          <div class="field">
+            <div class="field-top"><label for="frames">부드러움</label><output id="framesOut">36장</output></div>
+            <input type="range" id="frames" min="12" max="60" step="6" value="36">
+          </div>
+        </div>
+        <div class="field">
+          <label for="ledText">표시창 문구 (6자까지)</label>
+          <input type="text" id="ledText" maxlength="6" value="0:30" autocomplete="off" spellcheck="false">
+        </div>
+        <label class="check"><input type="checkbox" id="flicker" checked> 조명 웅웅 깜빡임</label>
+      </div>
+
+      <div class="group">
+        <h2>BODY</h2>
+        <div class="swatches" role="radiogroup" aria-label="전자레인지 색">
+          <input type="radio" name="body" id="b-mint" value="#BFD9CF" checked><label for="b-mint" style="background:#BFD9CF" title="민트"></label>
+          <input type="radio" name="body" id="b-butter" value="#EED99A"><label for="b-butter" style="background:#EED99A" title="버터"></label>
+          <input type="radio" name="body" id="b-berry" value="#F1B6C0"><label for="b-berry" style="background:#F1B6C0" title="딸기우유"></label>
+          <input type="radio" name="body" id="b-steel" value="#C7CCD2"><label for="b-steel" style="background:#C7CCD2" title="스테인리스"></label>
+          <input type="radio" name="body" id="b-black" value="#34393E"><label for="b-black" style="background:#34393E" title="블랙"></label>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>OUTPUT</h2>
+        <div class="seg" role="radiogroup" aria-label="GIF 크기">
+          <input type="radio" name="size" id="s-240" value="240"><label for="s-240">240px<br><small>이모지용</small></label>
+          <input type="radio" name="size" id="s-360" value="360" checked><label for="s-360">360px<br><small>기본</small></label>
+          <input type="radio" name="size" id="s-480" value="480"><label for="s-480">480px<br><small>선명하게</small></label>
+        </div>
+        <button type="button" class="start" id="make">START · GIF 굽기</button>
+        <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+        <p class="status" id="status" role="status"></p>
+      </div>
+    </section>
+  </div>
+
+  <section class="result" id="result" hidden aria-label="완성된 GIF">
+    <img id="resultImg" alt="완성된 전자레인지 회전 GIF">
+    <div>
+      <h3>띵! 다 돌았어요</h3>
+      <p class="meta" id="resultMeta"></p>
+      <p>저장 버튼이 안 먹히는 환경(미리보기 창 등)에서는 왼쪽 GIF를 우클릭하거나 길게 눌러서 저장하세요.</p>
+      <button type="button" class="dl" id="download">GIF 저장</button>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+import { GIFEncoder, quantize, applyPalette } from "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js";
+
+const BW = 480, BH = 340; // 설계 좌표계
+const $ = (id) => document.getElementById(id);
+const preview = $("preview");
+const pctx = preview.getContext("2d");
+
+const state = {
+  scale: 1, lift: 0, gap: 110, backDark: true,
+  sec: 2, frames: 36, led: "0:30", flicker: true,
+  body: "#BFD9CF", size: 360,
+};
+let chars = [null, null]; // { front, frontDark, frontUrl, frontName, back, backDark, backUrl, backName }
+
+/* ---------- 색 도우미 ---------- */
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function mix(h, target, amt) {
+  const a = hexToRgb(h), b = hexToRgb(target);
+  return "rgb(" + a.map((v, i) => Math.round(v + (b[i] - v) * amt)).join(",") + ")";
+}
+function isDark(h) { const [r, g, b] = hexToRgb(h); return (r * 299 + g * 587 + b * 114) / 1000 < 110; }
+function rr(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+/* ---------- 예시 캐릭터 (모찌) ---------- */
+function makeSample(back = false, bodyColor = "#FFF4EC") {
+  const c = document.createElement("canvas"); c.width = 300; c.height = 340;
+  const g = c.getContext("2d");
+  g.lineJoin = "round"; g.lineCap = "round";
+  // 잎사귀 (한쪽으로 치우쳐서 뒤집힌 게 보이게, 뒤에서 보면 반대편)
+  g.save();
+  if (back) { g.translate(300, 0); g.scale(-1, 1); }
+  g.fillStyle = "#6DBE7B"; g.strokeStyle = "#2E2926"; g.lineWidth = 7;
+  g.beginPath(); g.moveTo(160, 92); g.quadraticCurveTo(170, 30, 232, 34); g.quadraticCurveTo(222, 92, 160, 92); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(163, 88); g.lineTo(205, 52); g.lineWidth = 4; g.stroke();
+  g.restore();
+  // 몸
+  g.lineWidth = 8; g.fillStyle = bodyColor; g.strokeStyle = "#2E2926";
+  g.beginPath(); g.moveTo(40, 300);
+  g.bezierCurveTo(20, 200, 60, 92, 150, 92); g.bezierCurveTo(240, 92, 280, 200, 260, 300);
+  g.quadraticCurveTo(150, 322, 40, 300); g.closePath(); g.fill(); g.stroke();
+  if (back) {
+    // 뒷모습: 얼굴 대신 반죽 접힌 자국
+    g.strokeStyle = "rgba(46,41,38,0.45)"; g.lineWidth = 5;
+    g.beginPath(); g.moveTo(120, 262); g.quadraticCurveTo(150, 246, 180, 262); g.stroke();
+    g.beginPath(); g.moveTo(132, 280); g.quadraticCurveTo(150, 270, 168, 280); g.stroke();
+    g.fillStyle = "rgba(247,169,180,0.35)";
+    g.beginPath(); g.ellipse(150, 150, 30, 12, 0, 0, Math.PI * 2); g.fill();
+  } else {
+    // 볼
+    g.fillStyle = "#F7A9B4";
+    g.beginPath(); g.ellipse(88, 222, 22, 13, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(212, 222, 22, 13, 0, 0, Math.PI * 2); g.fill();
+    // 눈
+    g.fillStyle = "#2E2926";
+    g.beginPath(); g.ellipse(104, 192, 9, 12, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(196, 192, 9, 12, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#fff";
+    g.beginPath(); g.arc(107, 187, 3.5, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(199, 187, 3.5, 0, Math.PI * 2); g.fill();
+    // 입 ω
+    g.strokeStyle = "#2E2926"; g.lineWidth = 5;
+    g.beginPath(); g.moveTo(134, 214); g.quadraticCurveTo(142, 228, 150, 214); g.quadraticCurveTo(158, 228, 166, 214); g.stroke();
+  }
+  // 팔
+  g.lineWidth = 7; g.fillStyle = bodyColor; g.strokeStyle = "#2E2926";
+  g.beginPath(); g.ellipse(46, 250, 16, 12, -0.6, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.beginPath(); g.ellipse(254, 250, 16, 12, 0.6, 0, Math.PI * 2); g.fill(); g.stroke();
+  return c;
+}
+
+function buildBack(src) {
+  const w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.drawImage(src, 0, 0);
+  g.globalCompositeOperation = "source-atop";
+  g.fillStyle = "rgba(40,28,20,0.32)";
+  g.fillRect(0, 0, w, h);
+  return c;
+}
+
+const thumbSrc = (img) => img instanceof HTMLCanvasElement ? img.toDataURL() : img.src;
+
+function setFront(i, img, name) {
+  const c = chars[i] || { back: null, backDark: null, backUrl: "", backName: "" };
+  Object.assign(c, { front: img, frontDark: buildBack(img), frontUrl: thumbSrc(img), frontName: name });
+  chars[i] = c; renderCast();
+}
+function setBack(i, img, name) {
+  const c = chars[i]; if (!c) return;
+  Object.assign(c, img
+    ? { back: img, backDark: buildBack(img), backUrl: thumbSrc(img), backName: name }
+    : { back: null, backDark: null, backUrl: "", backName: "" });
+  renderCast();
+}
+function removeChar(i) {
+  chars[i] = null;
+  if (i === 0 && chars[1]) { chars[0] = chars[1]; chars[1] = null; }
+  renderCast();
+}
+function loadSamples() {
+  chars = [null, null];
+  setFront(0, makeSample(false), "예시 · 모찌"); setBack(0, makeSample(true), "예시 · 모찌 뒤");
+  setFront(1, makeSample(false, "#D4EABF"), "예시 · 쑥모찌"); setBack(1, makeSample(true, "#D4EABF"), "예시 · 쑥모찌 뒤");
+}
+const castNames = () => chars.filter(Boolean).map(c => c.frontName.replace(/^예시 · /, "").replace(/\.[^.]+$/, ""));
+
+/* ---------- 캐릭터 칸 UI ---------- */
+const esc = (s) => String(s).replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+function slotHtml(i, side, c) {
+  const isFront = side === "front";
+  const url = isFront ? c.frontUrl : c.backUrl;
+  const name = isFront ? c.frontName : (c.backName || "없음 · 앞모습을 반전해서 써요");
+  const thumb = url ? `<img src="${url}" alt="">` : `<span>앞모습<br>반전</span>`;
+  const btn = isFront ? "바꾸기" : (url ? "바꾸기" : "넣기");
+  const clear = !isFront && url ? `<button type="button" class="ghost small" data-clear-back="${i}">빼기</button>` : "";
+  return `<div class="slot" data-drop="${i}:${side}">
+    <div class="thumb">${thumb}</div>
+    <div class="slot-body">
+      <strong>${isFront ? "앞모습" : "뒷모습 <small>선택</small>"}</strong>
+      <span class="slot-name">${esc(name)}</span>
+      <div class="slot-actions">
+        <label class="file-btn small">${btn}<input type="file" accept="image/*" id="file-${i}-${side}" data-file="${i}:${side}"></label>${clear}
+      </div>
+    </div>
+  </div>`;
+}
+function renderCast() {
+  const count = chars.filter(Boolean).length;
+  let html = "";
+  chars.forEach((c, i) => {
+    if (c) {
+      const rm = count > 1 ? `<button type="button" class="ghost small" data-remove="${i}">이 캐릭터 빼기</button>` : "";
+      html += `<div class="cast-group"><div class="cast-head"><span>캐릭터 ${i + 1}</span>${rm}</div>
+        <div class="slots">${slotHtml(i, "front", c)}${slotHtml(i, "back", c)}</div></div>`;
+    } else if (i === 1 && chars[0]) {
+      html += `<div class="add-box" data-drop="1:front"><span>한 마리 더 넣으면 둘이 같이 돌아요.</span>
+        <label class="file-btn small">＋ 두 번째 캐릭터<input type="file" accept="image/*" id="file-1-front" data-file="1:front"></label></div>`;
+    }
+  });
+  $("cast").innerHTML = html;
+  $("gapField").hidden = count < 2;
+}
+function applyFile(target, file) {
+  const [i, side] = target.split(":");
+  const idx = +i;
+  loadImage(file, (img, name) => side === "front" ? setFront(idx, img, name) : setBack(idx, img, name));
+}
+const cast = () => $("cast");
+
+function drawChar(ctx, p, k, A) {
+  const { c, px, depth, face } = p;
+  const py = p.py - state.lift;
+  const fit = (img) => {
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    let H = 140 * state.scale * k, W = iw / ih * H;
+    const maxW = 220 * state.scale * k; if (W > maxW) { W = maxW; H = ih / iw * W; }
+    return [W, H];
+  };
+  // 이번 프레임에 그릴 면 고르기
+  const showBack = face < 0;
+  let src = c.front, mirror = true;
+  if (showBack && c.back) { src = state.backDark ? c.backDark : c.back; mirror = false; }
+  else if (showBack) { src = state.backDark ? c.frontDark : c.front; }
+  const [W, H] = fit(src);
+  const Wd = W * depth, Hd = H * depth;
+  // 발밑 그림자 (들어 올려도 회전판 위에 남음)
+  const sw = Wd * (0.18 + 0.28 * Math.abs(face));
+  ctx.fillStyle = "rgba(80,50,20,0.28)";
+  ctx.beginPath(); ctx.ellipse(px, p.py, Math.max(sw, 10), 7 * depth, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.save();
+  // 앞모습만 있으면 음수 스케일 = 좌우반전된 뒷모습
+  // 뒷모습 이미지가 있으면 그 이미지를 반전 없이 납작하게만
+  let sx = mirror ? face : Math.abs(face);
+  if (Math.abs(sx) < 0.04) sx = 0.04 * Math.sign(sx || 1);
+  ctx.translate(px, py);
+  ctx.scale(sx, 1);
+  ctx.drawImage(src, -Wd / 2, -Hd, Wd, Hd);
+  ctx.restore();
+}
+
+/* ---------- 한 프레임 그리기 (t: 0~1, 한 바퀴) ---------- */
+function drawFrame(ctx, t) {
+  const A = t * Math.PI * 2;
+  const body = state.body, darkBody = isDark(body);
+  const door = mix(body, "#000000", darkBody ? 0.25 : 0.07);
+  const edge = mix(body, "#000000", darkBody ? 0.45 : 0.28);
+
+  // 벽 타일
+  ctx.fillStyle = "#EFE3D6"; ctx.fillRect(0, 0, BW, BH);
+  ctx.strokeStyle = "rgba(160,130,110,0.22)"; ctx.lineWidth = 1.5;
+  for (let x = 0; x <= BW; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 300); ctx.stroke(); }
+  for (let y = 20; y <= 300; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(BW, y); ctx.stroke(); }
+  // 조리대
+  ctx.fillStyle = "#C9A27E"; ctx.fillRect(0, 300, BW, 40);
+  ctx.fillStyle = "#B48B66"; ctx.fillRect(0, 300, BW, 5);
+
+  // 그림자 + 다리
+  ctx.fillStyle = "rgba(60,40,25,0.25)";
+  ctx.beginPath(); ctx.ellipse(240, 303, 215, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#3A3F44";
+  rr(ctx, 44, 292, 28, 10, 3); ctx.fill(); rr(ctx, 408, 292, 28, 10, 3); ctx.fill();
+
+  // 본체
+  rr(ctx, 20, 26, 440, 270, 18); ctx.fillStyle = body; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = edge; ctx.stroke();
+  // 윗면 하이라이트
+  ctx.fillStyle = "rgba(255,255,255,0.28)"; rr(ctx, 30, 32, 420, 8, 4); ctx.fill();
+
+  // 문
+  rr(ctx, 34, 46, 300, 236, 10); ctx.fillStyle = door; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = edge; ctx.stroke();
+  // 손잡이
+  rr(ctx, 312, 70, 10, 188, 5); ctx.fillStyle = edge; ctx.fill();
+
+  // 창 내부
+  const wx = 52, wy = 64, ww = 248, wh = 200;
+  ctx.save();
+  rr(ctx, wx, wy, ww, wh, 8); ctx.clip();
+  let glow = 1;
+  if (state.flicker) glow = 0.9 + 0.06 * Math.sin(A * 3) + 0.04 * Math.sin(A * 7 + 1);
+  const g = ctx.createRadialGradient(176, 120, 10, 176, 150, 190);
+  g.addColorStop(0, `rgba(255,236,170,${glow})`);
+  g.addColorStop(0.55, `rgba(240,196,110,${glow})`);
+  g.addColorStop(1, "rgba(120,80,40,1)");
+  ctx.fillStyle = "#6B4A2A"; ctx.fillRect(wx, wy, ww, wh);
+  ctx.fillStyle = g; ctx.fillRect(wx, wy, ww, wh);
+  // 안쪽 바닥
+  ctx.fillStyle = "rgba(120,80,40,0.25)"; ctx.fillRect(wx, 230, ww, 40);
+
+  // 회전판
+  const cx = 176, cy = 238, prx = 102, pry = 20;
+  ctx.fillStyle = "rgba(90,60,30,0.35)";
+  ctx.beginPath(); ctx.ellipse(cx, cy + 5, prx, pry, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,250,235,0.55)";
+  ctx.beginPath(); ctx.ellipse(cx, cy, prx, pry, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = "rgba(150,110,60,0.35)"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(cx, cy, prx * 0.72, pry * 0.72, 0, 0, Math.PI * 2); ctx.stroke();
+  // 회전판 무늬 (도는 게 보이게)
+  for (let k = 0; k < 6; k++) {
+    const a = A + k * Math.PI / 3;
+    const dx = cx + Math.cos(a) * prx * 0.86, dy = cy + Math.sin(a) * pry * 0.86;
+    ctx.fillStyle = k === 0 ? "rgba(217,72,58,0.55)" : "rgba(150,110,60,0.4)";
+    ctx.beginPath(); ctx.ellipse(dx, dy, 3.4, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 캐릭터들
+  const list = chars.filter(Boolean);
+  if (list.length) {
+    const duo = list.length === 2;
+    const k = duo ? 0.78 : 1;        // 둘일 땐 조금 작게
+    // 같은 궤도 위에서 각자 따로 돈다 (1번이 앞장, 2번이 뒤따라감)
+    // 정면에서 둘 사이 가로 거리가 '간격'이 되도록 각도 차이를 정함
+    const R = duo ? 56 : 44;
+    const d = duo ? 2 * Math.asin(Math.min(1, state.gap / (2 * R))) : 0;
+    const placed = list.map((c, n) => {
+      const an = A + (n === 0 ? d / 2 : -d / 2);
+      const z = Math.cos(an) * R;                        // +면 앞쪽(보는 사람 쪽)
+      return {
+        c, z,
+        px: cx - Math.sin(an) * R,
+        py: cy + 2 + z * 0.2,
+        depth: 1 + z * 0.0016,
+        face: Math.cos(an),
+      };
+    });
+    placed.sort((p, q) => p.z - q.z);                    // 뒤에 있는 캐릭터부터
+    for (const p of placed) drawChar(ctx, p, k, A);
+  }
+
+  // 문 망사 무늬
+  ctx.fillStyle = "rgba(30,20,10,0.13)";
+  for (let y = wy + 3; y < wy + wh; y += 6) for (let x = wx + 3 + ((y / 6) % 2) * 3; x < wx + ww; x += 6) ctx.fillRect(x, y, 2, 2);
+  // 유리 반사
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  ctx.beginPath(); ctx.moveTo(wx + 30, wy); ctx.lineTo(wx + 90, wy); ctx.lineTo(wx + 20, wy + wh); ctx.lineTo(wx - 40, wy + wh); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.beginPath(); ctx.moveTo(wx + 110, wy); ctx.lineTo(wx + 130, wy); ctx.lineTo(wx + 60, wy + wh); ctx.lineTo(wx + 40, wy + wh); ctx.fill();
+  ctx.restore();
+  rr(ctx, wx, wy, ww, wh, 8); ctx.lineWidth = 3; ctx.strokeStyle = edge; ctx.stroke();
+
+  // 조작부
+  const px0 = 346;
+  rr(ctx, px0, 46, 102, 236, 8); ctx.fillStyle = mix(body, "#000000", darkBody ? 0.35 : 0.12); ctx.fill();
+  // 표시창
+  rr(ctx, px0 + 8, 56, 86, 36, 5); ctx.fillStyle = "#121517"; ctx.fill();
+  let txt = state.led || "";
+  if (t >= 0.5) txt = txt.replace(/:/g, " ");
+  ctx.fillStyle = "#FFB23E"; ctx.font = "22px DotGothic16, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(255,178,62,0.6)"; ctx.shadowBlur = 6;
+  ctx.fillText(txt, px0 + 51, 75, 78);
+  ctx.shadowBlur = 0;
+  // 버튼
+  const labels = ["1","2","3","4","5","6","7","8","9","","0",""];
+  const btnFill = darkBody ? "#4A5056" : "#FFFFFF", btnText = darkBody ? "#D9E2DE" : "#4A5056";
+  ctx.font = "13px DotGothic16, monospace";
+  for (let i = 0; i < 12; i++) {
+    const bx = px0 + 10 + (i % 3) * 28, by = 104 + Math.floor(i / 3) * 26;
+    rr(ctx, bx, by, 24, 20, 4); ctx.fillStyle = btnFill; ctx.globalAlpha = darkBody ? 1 : 0.75; ctx.fill(); ctx.globalAlpha = 1;
+    if (labels[i]) { ctx.fillStyle = btnText; ctx.fillText(labels[i], bx + 12, by + 11); }
+  }
+  // 다이얼
+  const dx = px0 + 51, dy = 238;
+  ctx.fillStyle = btnFill; ctx.beginPath(); ctx.arc(dx, dy, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = edge; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = "#D9483A"; ctx.lineWidth = 4; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx + Math.cos(-A - Math.PI / 2) * 15, dy + Math.sin(-A - Math.PI / 2) * 15); ctx.stroke();
+  ctx.lineCap = "butt";
+  // 작동 램프
+  ctx.fillStyle = "#FF6B4A"; ctx.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(A * 2));
+  ctx.beginPath(); ctx.arc(px0 + 90, 268, 4, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+}
+
+/* ---------- 미리보기 루프 ---------- */
+function sizePreview() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  preview.width = BW * dpr; preview.height = BH * dpr;
+  pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+sizePreview();
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function loop(now) {
+  const t = reduce ? 0.12 : (now / 1000 / state.sec) % 1;
+  drawFrame(pctx, t);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- 입력 연결 ---------- */
+function bindRange(id, outId, fn, fmt) {
+  const el = $(id), out = $(outId);
+  const upd = () => { fn(+el.value); out.textContent = fmt(+el.value); };
+  el.addEventListener("input", upd); upd();
+}
+bindRange("scale", "scaleOut", v => state.scale = v / 100, v => v + "%");
+bindRange("lift", "liftOut", v => state.lift = v, v => (v > 0 ? "+" : "") + v);
+bindRange("gap", "gapOut", v => state.gap = v, v => v);
+bindRange("sec", "secOut", v => state.sec = v / 10, v => (v / 10).toFixed(1) + "초");
+bindRange("frames", "framesOut", v => state.frames = v, v => v + "장");
+$("backDark").addEventListener("change", e => state.backDark = e.target.checked);
+$("flicker").addEventListener("change", e => state.flicker = e.target.checked);
+$("ledText").addEventListener("input", e => state.led = e.target.value);
+document.querySelectorAll('input[name=body]').forEach(r => r.addEventListener("change", e => state.body = e.target.value));
+document.querySelectorAll('input[name=size]').forEach(r => r.addEventListener("change", e => state.size = +e.target.value));
+
+function loadImage(file, onReady) {
+  if (!file || !file.type.startsWith("image/")) { $("status").textContent = "이미지 파일(PNG·JPG·WEBP 등)만 넣을 수 있어요."; return; }
+  const img = new Image();
+  img.onload = () => { onReady(img, file.name); $("status").textContent = ""; };
+  img.onerror = () => { $("status").textContent = "이미지를 읽지 못했어요. 다른 파일로 다시 넣어 주세요."; };
+  img.src = URL.createObjectURL(file);
+}
+$("reset").addEventListener("click", loadSamples);
+
+// 캐릭터 칸: 파일 선택, 빼기, 칸별 드래그 앤 드롭
+cast().addEventListener("change", e => {
+  const t = e.target.dataset?.file; if (!t) return;
+  applyFile(t, e.target.files[0]); e.target.value = "";
+});
+cast().addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.clearBack != null) setBack(+b.dataset.clearBack, null);
+  if (b.dataset.remove != null) removeChar(+b.dataset.remove);
+});
+["dragenter", "dragover"].forEach(ev => cast().addEventListener(ev, e => {
+  const z = e.target.closest("[data-drop]"); if (!z) return;
+  e.preventDefault(); z.classList.add("over");
+}));
+cast().addEventListener("dragleave", e => { const z = e.target.closest("[data-drop]"); if (z && !z.contains(e.relatedTarget)) z.classList.remove("over"); });
+cast().addEventListener("drop", e => {
+  const z = e.target.closest("[data-drop]"); if (!z) return;
+  e.preventDefault(); z.classList.remove("over");
+  const f = [...e.dataTransfer.files].find(f => f.type.startsWith("image/"));
+  if (f) applyFile(z.dataset.drop, f); else $("status").textContent = "이미지 파일(PNG·JPG·WEBP 등)만 넣을 수 있어요.";
+});
+
+// 미리보기에 놓으면 앞모습으로: 한 장이면 캐릭터 1, 두 장이면 캐릭터 1·2
+const dz = $("dropzone");
+["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("drag"); }));
+["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("drag"); }));
+dz.addEventListener("drop", e => {
+  const files = [...e.dataTransfer.files].filter(f => f.type.startsWith("image/"));
+  if (!files.length) { $("status").textContent = "이미지 파일(PNG·JPG·WEBP 등)만 넣을 수 있어요."; return; }
+  if (files.length === 1) { applyFile("0:front", files[0]); return; }
+  chars = [null, null];
+  loadImage(files[0], (img, name) => {
+    setFront(0, img, name);
+    loadImage(files[1], (img2, name2) => setFront(1, img2, name2));
+  });
+});
+document.addEventListener("paste", e => {
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+  if (item) applyFile("0:front", item.getAsFile());
+});
+
+/* ---------- GIF 굽기 ---------- */
+let lastBlob = null, lastUrl = null;
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+$("make").addEventListener("click", async () => {
+  const btn = $("make"), bar = $("bar"), status = $("status");
+  btn.disabled = true; bar.style.width = "0%";
+  try {
+    await document.fonts.ready;
+    const outW = state.size, outH = Math.round(outW * BH / BW);
+    const c = document.createElement("canvas"); c.width = outW; c.height = outH;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    const F = state.frames;
+    const delay = Math.max(20, Math.round(state.sec * 1000 / state.frames / 10) * 10);
+    const frames = [];
+    status.textContent = "프레임 굽는 중…";
+    for (let i = 0; i < F; i++) {
+      ctx.setTransform(outW / BW, 0, 0, outH / BH, 0, 0);
+      drawFrame(ctx, i / F);
+      frames.push(ctx.getImageData(0, 0, outW, outH).data);
+      if (i % 6 === 0) { bar.style.width = (i / F * 35) + "%"; await tick(); }
+    }
+    // 여러 프레임에서 뽑은 공용 팔레트 (프레임마다 색이 튀지 않게)
+    status.textContent = "색 고르는 중…";
+    await tick();
+    const step = Math.max(1, Math.floor(F / 8));
+    const picks = frames.filter((_, i) => i % step === 0);
+    const sample = new Uint8ClampedArray(picks.length * picks[0].length);
+    picks.forEach((d, i) => sample.set(d, i * d.length));
+    const palette = quantize(sample, 256, { format: "rgb565" });
+
+    status.textContent = "GIF로 묶는 중…";
+    const gif = GIFEncoder();
+    for (let i = 0; i < F; i++) {
+      const index = applyPalette(frames[i], palette, "rgb565");
+      gif.writeFrame(index, outW, outH, i === 0 ? { palette, delay, repeat: 0 } : { delay });
+      if (i % 4 === 0) { bar.style.width = (35 + i / F * 65) + "%"; await tick(); }
+    }
+    gif.finish();
+    bar.style.width = "100%";
+
+    lastBlob = new Blob([gif.bytes()], { type: "image/gif" });
+    if (lastUrl) URL.revokeObjectURL(lastUrl);
+    lastUrl = URL.createObjectURL(lastBlob);
+    $("resultImg").src = lastUrl;
+    $("resultMeta").textContent = `${outW}×${outH} · ${F}프레임 · 프레임당 ${delay}ms · ${(lastBlob.size / 1024).toFixed(0)}KB`;
+    $("result").hidden = false;
+    status.textContent = "완성! 아래에서 확인하세요.";
+    $("result").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
+  } catch (err) {
+    console.error(err);
+    status.textContent = "GIF를 만들다가 멈췄어요. 출력 크기나 부드러움을 낮춰서 다시 해 보세요.";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// claude.ai 안에서는 downloads 기능으로, 그 밖(GitHub Pages 등)에서는 일반 링크로 저장
+let downloads = null;
+window.claude?.use?.("downloads").then(d => { downloads = d; }).catch(() => {});
+
+$("download").addEventListener("click", async () => {
+  if (!lastUrl) return;
+  const base = castNames().join("_") || "character";
+  const filename = `${base}_전자레인지.gif`;
+  if (downloads) {
+    try { await downloads.save({ filename, data: lastBlob }); $("status").textContent = "저장했어요."; }
+    catch (err) {
+      if (err?.code !== "declined") $("status").textContent = "여기서는 저장이 안 돼요. GIF를 우클릭하거나 길게 눌러 저장하세요.";
+    }
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = lastUrl; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+loadSamples();
+document.fonts.load('22px "DotGothic16"').catch(() => {});
+requestAnimationFrame(loop);
+</script>
