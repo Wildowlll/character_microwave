@@ -106,6 +106,7 @@
   .swatches input:focus-visible + label { outline: 2px solid var(--focus); outline-offset: 3px; }
 
   input[type=range] { width: 100%; accent-color: var(--led); }
+  .caption-input { font-family: var(--display) !important; letter-spacing: 0 !important; }
   input[type=text] {
     font-family: var(--dot); font-size: 18px; letter-spacing: .1em; color: var(--led); background: var(--led-bg);
     border: 1px solid #3a4146; border-radius: 8px; padding: 6px 10px; width: 100%;
@@ -231,6 +232,21 @@
       </div>
 
       <div class="group">
+        <h2>DING!</h2>
+        <label class="check"><input type="checkbox" id="ending" checked> 다 돌면 띵! 하고 키링 완성 장면</label>
+        <div id="endingFields" class="group">
+          <div class="field">
+            <div class="field-top"><label for="spins">몇 바퀴 돌고 띵</label><output id="spinsOut">2바퀴</output></div>
+            <input type="range" id="spins" min="1" max="4" value="2">
+          </div>
+          <div class="field">
+            <label for="caption">완성 문구 (10자까지)</label>
+            <input type="text" id="caption" class="caption-input" maxlength="10" value="키링 완성!" autocomplete="off">
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
         <h2>BODY</h2>
         <div class="swatches" role="radiogroup" aria-label="전자레인지 색">
           <input type="radio" name="body" id="b-mint" value="#BFD9CF" checked><label for="b-mint" style="background:#BFD9CF" title="민트"></label>
@@ -277,6 +293,7 @@ const pctx = preview.getContext("2d");
 const state = {
   scale: 1, lift: 0, gap: 110, backDark: true,
   sec: 2, frames: 36, led: "0:30", flicker: true,
+  ending: true, spins: 2, caption: "키링 완성!",
   body: "#BFD9CF", size: 360,
 };
 let chars = [null, null]; // { front, frontDark, frontUrl, frontName, back, backDark, backUrl, backName }
@@ -413,6 +430,7 @@ function renderCast() {
   });
   $("cast").innerHTML = html;
   $("gapField").hidden = count < 2;
+  buildKeyring();
 }
 function applyFile(target, file) {
   const [i, side] = target.split(":");
@@ -453,9 +471,204 @@ function drawChar(ctx, p, k, A) {
   ctx.restore();
 }
 
-/* ---------- 한 프레임 그리기 (t: 0~1, 한 바퀴) ---------- */
-function drawFrame(ctx, t) {
-  const A = t * Math.PI * 2;
+const rrect = (...a) => rr(...a);
+/* ---------- 슈링크 키링 (엔딩 결과물) ---------- */
+let keyring = null; // { canvas, hx, hy }
+function tint(src, color) {
+  const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
+  const g = c.getContext("2d");
+  g.drawImage(src, 0, 0);
+  g.globalCompositeOperation = "source-in";
+  g.fillStyle = color; g.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+function buildKeyring() {
+  const list = chars.filter(Boolean);
+  if (!list.length) { keyring = null; return; }
+  const TH = 220, overlap = list.length > 1 ? 14 : 0;
+  const O = 14, T = 7, TAB = 34;                 // 테두리 두께, 플라스틱 두께, 고리 탭 여유
+  const sizes = list.map(c => {
+    const iw = c.front.naturalWidth || c.front.width, ih = c.front.naturalHeight || c.front.height;
+    let h = TH, w = iw / ih * h;
+    if (w > 260) { w = 260; h = ih / iw * w; }
+    return [w, h];
+  });
+  const artW = sizes.reduce((s, [w]) => s + w, 0) - overlap * (list.length - 1);
+  const W = Math.ceil(artW + O * 2 + 4), H = Math.ceil(TH + O * 2 + T + TAB);
+
+  // 그림 (슈링크 플라스틱처럼 색이 살짝 진해짐)
+  const art = document.createElement("canvas"); art.width = W; art.height = H;
+  const ag = art.getContext("2d", { willReadFrequently: true });
+  ag.filter = "saturate(1.25) contrast(1.05)";
+  let x = O + 2;
+  list.forEach((c, i) => {
+    const [w, h] = sizes[i];
+    ag.drawImage(c.front, x, O + TAB + (TH - h), w, h);
+    x += w - overlap;
+  });
+  ag.filter = "none";
+
+  // 고리 구멍 위치: 가운데 근처에서 제일 위에 있는 불투명 픽셀
+  const data = ag.getImageData(0, 0, W, H).data;
+  const topIn = (x0, x1) => {
+    for (let y = 0; y < H; y++) for (let xx = Math.max(0, x0); xx < Math.min(W, x1); xx++)
+      if (data[(y * W + xx) * 4 + 3] > 40) return y;
+    return -1;
+  };
+  // 가운데 기둥의 윗면(탭을 이어 붙일 곳)과 전체 윗면(탭을 올릴 높이)
+  let topY = topIn(W / 2 - 16, W / 2 + 16);
+  const topAll = topIn(0, W);
+  if (topY < 0) topY = topIn(W / 2 - 70, W / 2 + 70);
+  if (topY < 0) topY = O + TAB;
+  const tabR = 20, holeR = 7;
+  const tabCY = Math.max(tabR + 2, Math.min(topY, topAll < 0 ? topY : topAll) - 6);
+
+  // 흰 테두리 모양 = 실루엣을 사방으로 번지게 + 고리 탭
+  const sil = tint(art, "#FFFFFF");
+  const shape = document.createElement("canvas"); shape.width = W; shape.height = H;
+  const sg = shape.getContext("2d");
+  for (const r of [O, O * 0.55]) for (let i = 0; i < 24; i++) {
+    const a = i / 24 * Math.PI * 2;
+    sg.drawImage(sil, Math.cos(a) * r, Math.sin(a) * r);
+  }
+  sg.fillStyle = "#FFFFFF";
+  sg.beginPath(); sg.arc(W / 2, tabCY, tabR, 0, Math.PI * 2); sg.fill();
+  sg.fillRect(W / 2 - tabR * 0.75, tabCY, tabR * 1.5, Math.max(0, topY - tabCY + O));
+
+  // 합치기: 두께 → 흰 판 → 그림 → 광택 → 구멍
+  const out = document.createElement("canvas"); out.width = W; out.height = H;
+  const og = out.getContext("2d");
+  og.drawImage(tint(shape, "#CFC4B8"), 0, T);
+  og.drawImage(tint(shape, "#E6DDD3"), 0, T * 0.45);
+  og.drawImage(shape, 0, 0);
+  og.drawImage(art, 0, 0);
+  const gloss = document.createElement("canvas"); gloss.width = W; gloss.height = H;
+  const gg = gloss.getContext("2d");
+  const lg = gg.createLinearGradient(0, 0, W, H);
+  lg.addColorStop(0.18, "rgba(255,255,255,0)");
+  lg.addColorStop(0.28, "rgba(255,255,255,0.55)");
+  lg.addColorStop(0.36, "rgba(255,255,255,0)");
+  lg.addColorStop(0.62, "rgba(255,255,255,0)");
+  lg.addColorStop(0.66, "rgba(255,255,255,0.3)");
+  lg.addColorStop(0.70, "rgba(255,255,255,0)");
+  gg.fillStyle = lg; gg.fillRect(0, 0, W, H);
+  gg.globalCompositeOperation = "destination-in"; gg.drawImage(shape, 0, 0);
+  og.drawImage(gloss, 0, 0);
+  og.globalCompositeOperation = "destination-out";
+  og.beginPath(); og.arc(W / 2, tabCY, holeR, 0, Math.PI * 2); og.fill();
+  og.beginPath(); og.arc(W / 2, tabCY + T, holeR, 0, Math.PI * 2); og.fill();
+  keyring = { canvas: out, hx: W / 2, hy: tabCY };
+}
+
+const DING = 0.7, SHOW = 2.9;   // 초
+function timeline() {
+  const S = (state.ending ? state.spins : 1) * state.sec;
+  return { S, total: state.ending ? S + DING + SHOW : S };
+}
+const easeOutBack = (u) => { const c1 = 1.7, c3 = c1 + 1; return 1 + c3 * Math.pow(u - 1, 3) + c1 * Math.pow(u - 1, 2); };
+
+function popText(ctx, text, x, y, size, s, fill = "#FFFFFF") {
+  ctx.save();
+  ctx.translate(x, y); ctx.scale(s, s);
+  ctx.font = `${size}px "Do Hyeon", sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+  ctx.lineWidth = size * 0.22; ctx.strokeStyle = "#2E2926"; ctx.strokeText(text, 0, 0);
+  ctx.fillStyle = fill; ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+function sparkle(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.quadraticCurveTo(x, y, x, y + r);
+  ctx.quadraticCurveTo(x, y, x - r, y); ctx.quadraticCurveTo(x, y, x, y - r); ctx.fill();
+}
+
+// 띵! (멈춘 직후부터)
+function drawDing(ctx, after) {
+  const u = Math.min(1, after / 0.18);
+  const s = after < 0.18 ? 1.25 * u : 1.25 - 0.25 * Math.min(1, (after - 0.18) / 0.2);
+  popText(ctx, "띵!", 404, 30, 38, Math.max(0.01, s), "#FFE08A");
+  ctx.strokeStyle = "#2E2926"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  for (let i = 0; i < 3; i++) {
+    const a = -Math.PI * 0.85 + i * 0.35, r0 = 30 * s, r1 = 42 * s;
+    ctx.beginPath(); ctx.moveTo(404 + Math.cos(a) * r0 - 20, 30 + Math.sin(a) * r0);
+    ctx.lineTo(404 + Math.cos(a) * r1 - 20, 30 + Math.sin(a) * r1); ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+}
+
+// 키링 짠
+function drawReveal(ctx, tau) {
+  const fade = tau > SHOW - 0.35 ? Math.max(0, (SHOW - tau) / 0.35) : 1;
+  ctx.save();
+  ctx.globalAlpha = fade;
+  // 어둡게 + 빛줄기
+  ctx.fillStyle = `rgba(42,30,22,${0.5 * Math.min(1, tau / 0.3)})`;
+  ctx.fillRect(0, 0, BW, BH);
+  ctx.save();
+  ctx.translate(240, 150); ctx.rotate(tau * 0.5);
+  ctx.fillStyle = `rgba(255,226,150,${0.22 * Math.min(1, tau / 0.4)})`;
+  for (let i = 0; i < 14; i++) {
+    ctx.rotate(Math.PI * 2 / 14);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(340, -40); ctx.lineTo(340, 40); ctx.fill();
+  }
+  ctx.restore();
+
+  if (keyring) {
+    const k = keyring, kc = k.canvas;
+    const s = Math.min(196 / kc.height, 300 / kc.width);
+    const dropU = Math.min(1, tau / 0.5);
+    const pivotY = -230 + 250 * easeOutBack(dropU);
+    const swing = 0.42 * Math.exp(-2.2 * tau) * Math.sin(9 * tau);
+    const L = 22, rr = 15;
+    ctx.save();
+    ctx.translate(240, pivotY); ctx.rotate(swing);
+    // 걸쇠
+    ctx.fillStyle = "#C3C8CE"; rrect(ctx, -6, -14, 12, 18, 5); ctx.fill();
+    ctx.strokeStyle = "#8A9097"; ctx.lineWidth = 1.5; ctx.stroke();
+    // 체인
+    ctx.strokeStyle = "#AEB4BB"; ctx.lineWidth = 2.5;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      if (i % 2 === 0) ctx.ellipse(0, 7 + i * 6.5, 3, 5, 0, 0, Math.PI * 2);
+      else ctx.ellipse(0, 7 + i * 6.5, 1.2, 5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // 키링 본체
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 8;
+    const holeLocalY = L + rr * 1.55;
+    ctx.drawImage(kc, -k.hx * s, holeLocalY - k.hy * s, kc.width * s, kc.height * s);
+    ctx.restore();
+    // 링 (구멍을 지나감)
+    ctx.lineWidth = 4.5; ctx.strokeStyle = "#B7BDC4";
+    ctx.beginPath(); ctx.arc(0, L + rr, rr, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath(); ctx.arc(0, L + rr, rr, Math.PI * 1.1, Math.PI * 1.6); ctx.stroke();
+    ctx.restore();
+  }
+
+  // 반짝이
+  const spots = [[92, 70], [392, 92], [70, 214], [410, 222], [140, 30], [340, 40]];
+  ctx.fillStyle = "#FFF3C4";
+  spots.forEach(([x, y], i) => {
+    const r = Math.max(0, 5 + 4 * Math.sin(tau * 7 + i * 1.7)) * Math.min(1, tau / 0.5);
+    if (r > 0.5) sparkle(ctx, x, y, r);
+  });
+  // 문구
+  if (tau > 0.45) {
+    const u = Math.min(1, (tau - 0.45) / 0.3);
+    popText(ctx, state.caption || "키링 완성!", 240, 316, 28, Math.max(0.01, easeOutBack(u)));
+  }
+  ctx.restore();
+}
+
+/* ---------- 한 프레임 그리기 (time: 타임라인 위 초) ---------- */
+function drawFrame(ctx, time) {
+  const { S } = timeline();
+  const spinning = time < S;
+  const after = spinning ? -1 : time - S;              // 멈춘 뒤 흐른 시간
+  const A = spinning ? time / state.sec * Math.PI * 2 : 0;
+  const t = spinning ? (time % state.sec) / state.sec : 0;
   const body = state.body, darkBody = isDark(body);
   const door = mix(body, "#000000", darkBody ? 0.25 : 0.07);
   const edge = mix(body, "#000000", darkBody ? 0.45 : 0.28);
@@ -468,6 +681,10 @@ function drawFrame(ctx, t) {
   // 조리대
   ctx.fillStyle = "#C9A27E"; ctx.fillRect(0, 300, BW, 40);
   ctx.fillStyle = "#B48B66"; ctx.fillRect(0, 300, BW, 5);
+
+  // 띵 순간 살짝 흔들림
+  ctx.save();
+  if (after >= 0 && after < 0.35) ctx.translate(Math.sin(after * 90) * 3 * (1 - after / 0.35), 0);
 
   // 그림자 + 다리
   ctx.fillStyle = "rgba(60,40,25,0.25)";
@@ -492,7 +709,8 @@ function drawFrame(ctx, t) {
   ctx.save();
   rr(ctx, wx, wy, ww, wh, 8); ctx.clip();
   let glow = 1;
-  if (state.flicker) glow = 0.9 + 0.06 * Math.sin(A * 3) + 0.04 * Math.sin(A * 7 + 1);
+  if (spinning && state.flicker) glow = 0.9 + 0.06 * Math.sin(A * 3) + 0.04 * Math.sin(A * 7 + 1);
+  if (!spinning) glow = Math.max(0.25, 1 - after * 2.5);   // 멈추면 불 꺼짐
   const g = ctx.createRadialGradient(176, 120, 10, 176, 150, 190);
   g.addColorStop(0, `rgba(255,236,170,${glow})`);
   g.addColorStop(0.55, `rgba(240,196,110,${glow})`);
@@ -536,7 +754,8 @@ function drawFrame(ctx, t) {
         px: cx - Math.sin(an) * R,
         py: cy + 2 + z * 0.2,
         depth: 1 + z * 0.0016,
-        face: Math.cos(an),
+        // 멈추면 둘 다 스르륵 정면을 돌아봄
+        face: spinning ? Math.cos(an) : Math.cos(an) + (1 - Math.cos(an)) * (0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, after / 0.4))),
       };
     });
     placed.sort((p, q) => p.z - q.z);                    // 뒤에 있는 캐릭터부터
@@ -559,8 +778,8 @@ function drawFrame(ctx, t) {
   rr(ctx, px0, 46, 102, 236, 8); ctx.fillStyle = mix(body, "#000000", darkBody ? 0.35 : 0.12); ctx.fill();
   // 표시창
   rr(ctx, px0 + 8, 56, 86, 36, 5); ctx.fillStyle = "#121517"; ctx.fill();
-  let txt = state.led || "";
-  if (t >= 0.5) txt = txt.replace(/:/g, " ");
+  let txt = spinning ? (state.led || "") : "END";
+  if (spinning && t >= 0.5) txt = txt.replace(/:/g, " ");
   ctx.fillStyle = "#FFB23E"; ctx.font = "22px DotGothic16, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.shadowColor = "rgba(255,178,62,0.6)"; ctx.shadowBlur = 6;
   ctx.fillText(txt, px0 + 51, 75, 78);
@@ -582,8 +801,14 @@ function drawFrame(ctx, t) {
   ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx + Math.cos(-A - Math.PI / 2) * 15, dy + Math.sin(-A - Math.PI / 2) * 15); ctx.stroke();
   ctx.lineCap = "butt";
   // 작동 램프
-  ctx.fillStyle = "#FF6B4A"; ctx.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(A * 2));
+  ctx.fillStyle = spinning ? "#FF6B4A" : "#7A5A52"; ctx.globalAlpha = spinning ? 0.55 + 0.45 * Math.abs(Math.sin(A * 2)) : 1;
   ctx.beginPath(); ctx.arc(px0 + 90, 268, 4, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.restore(); // 흔들림 끝
+
+  if (!spinning) {
+    drawDing(ctx, after);
+    if (after > DING) drawReveal(ctx, after - DING);
+  }
 }
 
 /* ---------- 미리보기 루프 ---------- */
@@ -595,8 +820,9 @@ function sizePreview() {
 sizePreview();
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 function loop(now) {
-  const t = reduce ? 0.12 : (now / 1000 / state.sec) % 1;
-  drawFrame(pctx, t);
+  const { total } = timeline();
+  const time = reduce ? 0.12 * state.sec : (now / 1000) % total;
+  drawFrame(pctx, time);
   requestAnimationFrame(loop);
 }
 
@@ -613,6 +839,9 @@ bindRange("sec", "secOut", v => state.sec = v / 10, v => (v / 10).toFixed(1) + "
 bindRange("frames", "framesOut", v => state.frames = v, v => v + "장");
 $("backDark").addEventListener("change", e => state.backDark = e.target.checked);
 $("flicker").addEventListener("change", e => state.flicker = e.target.checked);
+$("ending").addEventListener("change", e => { state.ending = e.target.checked; $("endingFields").hidden = !state.ending; });
+bindRange("spins", "spinsOut", v => state.spins = v, v => v + "바퀴");
+$("caption").addEventListener("input", e => state.caption = e.target.value);
 $("ledText").addEventListener("input", e => state.led = e.target.value);
 document.querySelectorAll('input[name=body]').forEach(r => r.addEventListener("change", e => state.body = e.target.value));
 document.querySelectorAll('input[name=size]').forEach(r => r.addEventListener("change", e => state.size = +e.target.value));
@@ -680,30 +909,32 @@ $("make").addEventListener("click", async () => {
     const c = document.createElement("canvas"); c.width = outW; c.height = outH;
     const ctx = c.getContext("2d", { willReadFrequently: true });
     const F = state.frames;
-    const delay = Math.max(20, Math.round(state.sec * 1000 / state.frames / 10) * 10);
-    const frames = [];
-    status.textContent = "프레임 굽는 중…";
-    for (let i = 0; i < F; i++) {
+    const dt = state.sec / F;                          // 프레임 간격(초)
+    const delay = Math.max(20, Math.round(dt * 1000 / 10) * 10);
+    const { S, total } = timeline();
+    const spinFrames = Math.round(S / dt);
+    const N = state.ending ? spinFrames + Math.round((total - S) / dt) : spinFrames;
+    const render = (i) => {
       ctx.setTransform(outW / BW, 0, 0, outH / BH, 0, 0);
-      drawFrame(ctx, i / F);
-      frames.push(ctx.getImageData(0, 0, outW, outH).data);
-      if (i % 6 === 0) { bar.style.width = (i / F * 35) + "%"; await tick(); }
-    }
-    // 여러 프레임에서 뽑은 공용 팔레트 (프레임마다 색이 튀지 않게)
+      drawFrame(ctx, i < spinFrames ? i * dt : S + (i - spinFrames) * dt);
+      return ctx.getImageData(0, 0, outW, outH).data;
+    };
+
+    // 타임라인 여기저기서 뽑은 공용 팔레트 (프레임마다 색이 튀지 않게, 키링 색 포함)
     status.textContent = "색 고르는 중…";
     await tick();
-    const step = Math.max(1, Math.floor(F / 8));
-    const picks = frames.filter((_, i) => i % step === 0);
+    const picks = [];
+    for (let j = 0; j < 12; j++) picks.push(render(Math.min(N - 1, Math.floor(j / 11 * (N - 1)))));
     const sample = new Uint8ClampedArray(picks.length * picks[0].length);
     picks.forEach((d, i) => sample.set(d, i * d.length));
     const palette = quantize(sample, 256, { format: "rgb565" });
 
-    status.textContent = "GIF로 묶는 중…";
+    status.textContent = "굽는 중…";
     const gif = GIFEncoder();
-    for (let i = 0; i < F; i++) {
-      const index = applyPalette(frames[i], palette, "rgb565");
+    for (let i = 0; i < N; i++) {
+      const index = applyPalette(render(i), palette, "rgb565");
       gif.writeFrame(index, outW, outH, i === 0 ? { palette, delay, repeat: 0 } : { delay });
-      if (i % 4 === 0) { bar.style.width = (35 + i / F * 65) + "%"; await tick(); }
+      if (i % 4 === 0) { bar.style.width = (8 + i / N * 92) + "%"; await tick(); }
     }
     gif.finish();
     bar.style.width = "100%";
@@ -712,7 +943,7 @@ $("make").addEventListener("click", async () => {
     if (lastUrl) URL.revokeObjectURL(lastUrl);
     lastUrl = URL.createObjectURL(lastBlob);
     $("resultImg").src = lastUrl;
-    $("resultMeta").textContent = `${outW}×${outH} · ${F}프레임 · 프레임당 ${delay}ms · ${(lastBlob.size / 1024).toFixed(0)}KB`;
+    $("resultMeta").textContent = `${outW}×${outH} · ${N}프레임 · 프레임당 ${delay}ms · ${(lastBlob.size / 1024).toFixed(0)}KB`;
     $("result").hidden = false;
     status.textContent = "완성! 아래에서 확인하세요.";
     $("result").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
@@ -746,5 +977,6 @@ $("download").addEventListener("click", async () => {
 
 loadSamples();
 document.fonts.load('22px "DotGothic16"').catch(() => {});
+document.fonts.load('30px "Do Hyeon"').catch(() => {});
 requestAnimationFrame(loop);
 </script>
